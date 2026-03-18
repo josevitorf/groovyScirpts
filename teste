@@ -1,0 +1,254 @@
+// Simulando o execution.getVariable
+class ExecutionMock {
+    def variables = [:]
+    
+    def getVariable(String name) {
+        return variables[name]
+    }
+    
+    void setVariable(String name, value) {
+        variables[name] = value
+    }
+}
+
+// Função JSON mock (já que no console não tem a implementação real)
+def JSON = { obj -> 
+    return new JsonSlurper().parseText(obj instanceof String ? obj : obj.toString())
+}
+
+// Script completo adaptado para teste
+import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
+
+// Configuração do teste
+def execution = new ExecutionMock()
+
+// ===== CENÁRIOS PARA TESTAR =====
+// Descomente UM cenário por vez para testar
+
+// Cenário 1: ✅ CORRETO - Apenas oferta_cartao_npc
+execution.setVariable("oferta_cartao_npc", '''
+{
+    "data_vencimento": "2024-12-31",
+    "opcoes_produtos_disponiveis": [
+        {
+            "id_oferta": 123,
+            "dados_produto": [
+                {
+                    "id": "ofertas",
+                    "valor": [
+                        {
+                            "id": 456,
+                            "produtos": [
+                                {
+                                    "idProduto": 789,
+                                    "dadosProduto": {
+                                        "dn": "123456",
+                                        "planos": [
+                                            {"idPlano": 111}
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "id": "canal",
+                    "valor": {
+                        "canalOrigem": "DIGITAL",
+                        "subcanalOrigem": "APP"
+                    }
+                },
+                {
+                    "id": "idIntencao",
+                    "valor": "INT-123"
+                }
+            ]
+        }
+    ]
+}
+''')
+
+execution.setVariable("oferta_produtos", [aplicaut: [indicador_contratar: true]])
+execution.setVariable("oferta_pacote", [codigoPacote: "PAC123", nomePacote: "Pacote Teste", valorPacote: 100.0])
+execution.setVariable("motor_efetivacao_id_origem", "12345")
+
+// Cenário 2: ✅ CORRETO - Apenas oferta_cartao
+// execution.setVariable("oferta_cartao", '''
+// {
+//     "bandeira_cartao": "VISA",
+//     "codigo_fatura_digital_cartao": "123",
+//     "codigo_tipo_cartao": "GOLD",
+//     "dia_vencimento_cartao": 10,
+//     "dn_cartao_credito": "123456",
+//     "dn_cartao_debito": "789012",
+//     "indicador_debito_automatico": true,
+//     "indicador_oferta_fatura": false,
+//     "indicador_opcao_seguro_cartao": true,
+//     "indicador_overlimit": false,
+//     "indicador_programa_recompensa": true,
+//     "numero_de_parcela": 1,
+//     "tipo_cartao": "CREDITO",
+//     "valor_da_parcela": 50.0,
+//     "valor_maximo_cartao": 5000.0,
+//     "valor_minimo_cartao": 100.0,
+//     "valor_total_anuidade_cartao": 300.0
+// }
+// ''')
+// execution.setVariable("oferta_produtos", [aplicaut: [indicador_contratar: true]])
+// execution.setVariable("oferta_pacote", [codigoPacote: "PAC123", nomePacote: "Pacote Teste", valorPacote: 100.0])
+// execution.setVariable("motor_efetivacao_id_origem", "12345")
+
+// Cenário 3: ❌ ERRO - Nenhum dos dois
+// execution.setVariable("oferta_produtos", [aplicaut: [indicador_contratar: true]])
+// execution.setVariable("oferta_pacote", [codigoPacote: "PAC123", nomePacote: "Pacote Teste", valorPacote: 100.0])
+// execution.setVariable("motor_efetivacao_id_origem", "12345")
+
+// Cenário 4: ❌ ERRO - Ambos preenchidos
+// execution.setVariable("oferta_cartao", "{\"bandeira_cartao\":\"VISA\"}")
+// execution.setVariable("oferta_cartao_npc", "{\"data_vencimento\":\"2024-12-31\"}")
+// execution.setVariable("oferta_produtos", [aplicaut: [indicador_contratar: true]])
+// execution.setVariable("oferta_pacote", [codigoPacote: "PAC123", nomePacote: "Pacote Teste", valorPacote: 100.0])
+// execution.setVariable("motor_efetivacao_id_origem", "12345")
+
+// ===== SEU CÓDIGO ORIGINAL (ADAPTADO) =====
+def errors = new ArrayList<Map>()
+
+def addError = { String field, String message -> 
+    errors.add(["campo": field, "mensagem": message]) 
+}
+
+def isNullOrEmpty = { obj ->
+    obj == null || 
+    (obj instanceof String && (obj == "null" || obj.trim().isEmpty())) ||
+    (obj instanceof Map && obj.isEmpty()) ||
+    (obj instanceof List && obj.isEmpty())
+}
+
+def camposObrigatoriosOfertaPacote = [
+    "codigoPacote",
+    "nomePacote",
+    "valorPacote"
+]
+
+def camposObrigatoriosOfertaCartao = [
+    "\$.bandeira_cartao",
+    "\$.codigo_fatura_digital_cartao",
+    "\$.codigo_tipo_cartao",
+    "\$.dia_vencimento_cartao",
+    "\$.dn_cartao_credito",
+    "\$.dn_cartao_debito",
+    "\$.indicador_debito_automatico",
+    "\$.indicador_oferta_fatura",
+    "\$.indicador_opcao_seguro_cartao",
+    "\$.indicador_overlimit",
+    "\$.indicador_programa_recompensa",
+    "\$.numero_de_parcela",
+    "\$.tipo_cartao",
+    "\$.valor_da_parcela",
+    "\$.valor_maximo_cartao",
+    "\$.valor_minimo_cartao",
+    "\$.valor_total_anuidade_cartao"
+]
+
+def ofertaCartaoNpcCaminhosObrigatorios = [
+    "\$.data_vencimento",
+    "\$.opcoes_produtos_disponiveis[?(@.id_oferta!=null)].id_oferta",
+    "\$.opcoes_produtos_disponiveis[0].dados_produto[?(@.id=='ofertas')].id",
+    "\$.opcoes_produtos_disponiveis[0].dados_produto[?(@.id=='ofertas')].valor[?(@.id!=null)].id",
+    "\$.opcoes_produtos_disponiveis[0].dados_produto[?(@.id=='ofertas')].valor[0].produtos[?(@.idProduto!=null)].idProduto",
+    "\$.opcoes_produtos_disponiveis[0].dados_produto[?(@.id=='ofertas')].valor[0].produtos[0].dadosProduto.planos[?(@.idPlano!=null)].idPlano",
+    "\$.opcoes_produtos_disponiveis[0].dados_produto[?(@.id=='ofertas')].valor[0].produtos[0].dadosProduto.dn",
+    "\$.opcoes_produtos_disponiveis[0].dados_produto[?(@.id=='canal')].valor.canalOrigem",
+    "\$.opcoes_produtos_disponiveis[0].dados_produto[?(@.id=='canal')].valor.subcanalOrigem",
+    "\$.opcoes_produtos_disponiveis[0].dados_produto[?(@.id=='idIntencao')].valor"
+]
+
+def ofertaCartao = execution.getVariable("oferta_cartao")
+def ofertaCartaoNpc = execution.getVariable("oferta_cartao_npc")
+
+def ofertaCartaoValida = !isNullOrEmpty(ofertaCartao)
+def ofertaCartaoNpcValida = !isNullOrEmpty(ofertaCartaoNpc)
+
+println "=== TESTANDO VALIDAÇÃO ==="
+println "oferta_cartao: ${ofertaCartaoValida ? 'PRESENTE' : 'AUSENTE'}"
+println "oferta_cartao_npc: ${ofertaCartaoNpcValida ? 'PRESENTE' : 'AUSENTE'}"
+
+if ((!ofertaCartaoValida && !ofertaCartaoNpcValida) || (ofertaCartaoValida && ofertaCartaoNpcValida)) {
+    addError("oferta_cartao ou oferta_cartao_npc", "Exatamente uma das variáveis oferta_cartao ou oferta_cartao_npc deve ser fornecida.")
+    println "❌ ERRO: ${errors[0].mensagem}"
+} else if (ofertaCartaoNpcValida) {
+    println "✅ VALIDAÇÃO INICIAL OK - Validando oferta_cartao_npc"
+    // Simulação simplificada da validação do JSON
+    try {
+        def json = new JsonSlurper().parseText(ofertaCartaoNpc.toString())
+        ofertaCartaoNpcCaminhosObrigatorios.each { caminho ->
+            if (caminho.contains("data_vencimento") && !json.data_vencimento) {
+                addError(caminho, "Campo obrigatorio nao encontrado.")
+            }
+            // Adicione mais validações conforme necessário
+        }
+    } catch (Exception e) {
+        println "Erro ao parsear JSON: ${e.message}"
+    }
+} else if (ofertaCartaoValida) {
+    println "✅ VALIDAÇÃO INICIAL OK - Validando oferta_cartao"
+    try {
+        def json = new JsonSlurper().parseText(ofertaCartao.toString())
+        camposObrigatoriosOfertaCartao.each { campo ->
+            def campoLimpo = campo.replace("\$.", "")
+            if (!json.containsKey(campoLimpo)) {
+                addError(campo, "Campo obrigatorio nao encontrado.")
+            }
+        }
+    } catch (Exception e) {
+        println "Erro ao parsear JSON: ${e.message}"
+    }
+}
+
+// Validação de oferta_produtos
+def ofertaProdutos = execution.getVariable("oferta_produtos")
+if (isNullOrEmpty(ofertaProdutos)) {
+    addError("oferta_produtos", "Campo obrigatório")
+} else if (ofertaProdutos instanceof Map) {
+    def aplicaut = ofertaProdutos["aplicaut"]
+    if (aplicaut != null && aplicaut instanceof Map) {
+        def indicadorContratar = aplicaut["indicador_contratar"]
+        if (indicadorContratar == null) {
+            addError("aplicaut.indicador_contratar", "Campo obrigatório")
+        } else if (!(indicadorContratar instanceof Boolean)) {
+            addError("aplicaut.indicador_contratar", "Deve ser boolean")
+        }
+    }
+}
+
+// Validação de oferta_pacote
+def ofertaPacote = execution.getVariable("oferta_pacote")
+if (isNullOrEmpty(ofertaPacote)) {
+    addError("oferta_pacote", "Campo obrigatório")
+} else if (ofertaPacote instanceof Map) {
+    camposObrigatoriosOfertaPacote.each { campo ->
+        if (!ofertaPacote.containsKey(campo) || ofertaPacote[campo] == null) {
+            addError("oferta_pacote.${campo}", "Campo obrigatório")
+        }
+    }
+}
+
+// Campos Obrigatórios Tarefa
+def motorEfetivacaoIdOrigem = execution.getVariable("motor_efetivacao_id_origem")
+if (isNullOrEmpty(motorEfetivacaoIdOrigem)) {
+    addError("motor_efetivacao_id_origem", "Campo obrigatório")
+}
+
+// Resultado final
+println "\n=== RESULTADO FINAL ==="
+if (errors.isEmpty()) {
+    println "✅ SUCESSO! Todas as validações passaram."
+} else {
+    println "❌ ERROS ENCONTRADOS (${errors.size()}):"
+    errors.each { error ->
+        println "   - Campo: ${error.campo}"
+        println "     Mensagem: ${error.mensagem}"
+    }
+}
